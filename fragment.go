@@ -24,15 +24,6 @@ func Fatal(err error) {
 	}
 }
 
-func isAscii(utf8Bytes []byte) bool {
-	for _, b := range utf8Bytes {
-		if b > 0x7f {
-			return false
-		}
-	}
-	return true
-}
-
 var jisDecoder = japanese.ShiftJIS.NewDecoder()
 
 // \xFF5F-\xFF9F is half width kana and punctuation  (e.g. ｟ ｠ ｡ ｢ ｣ ､ ･ ｦ ｧ ｨ ｩ )
