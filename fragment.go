@@ -143,13 +143,17 @@ func textKey(text string) string {
 }
 
 type TLLine struct {
+	TextKey        string `csv:"TEXT_KEY"`
 	Length         int    `csv:"LENGTH"`
+	TlLength       int    `csv:"TL_LENGTH"`
 	OriginalText   string `csv:"ORIGINAL_TEXT"`
 	TranslatedText string `csv:"TRANSLATED_TEXT"`
-	Status         string `csv:"STATUS"`
-	TlLength       int    `csv:"TL_LENGTH"`
 	Notes          string `csv:"NOTES"`
-	TextKey        string `csv:"TEXT_KEY"`
+	Status         string `csv:"STATUS"`
+	TlCredit       string `csv:"TL_CREDIT"`
+	OrigLines      int    `csv:"ORIG_LINES"`
+	TlLines        int    `csv:"TL_LINES"`
+	LineStatus     string `csv:"LINE_STATUS"`
 }
 
 func uniqueTLLines(orig []*GameLine) []*TLLine {
