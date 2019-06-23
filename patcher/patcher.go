@@ -2,8 +2,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"path/filepath"
 
 	"github.com/gocarina/gocsv"
 )
@@ -28,13 +30,16 @@ func Fatal(err error) {
 var (
 	translatedCsv = flag.String("translatedCsv", "", "path to translated csv")
 	inputFolder   = flag.String("inputFolder", "", "original game folder")
-	outputFolder  = flag.String("inputFolder", "", "original game folder")
+	outputFolder  = flag.String("outputFolder", "", "patched output")
 )
 
 func main() {
+	fmt.Print("fragment patcher by plm")
 	flag.Parse()
 
 	var gameLines []*GameLine
+	gameLinesMap := map[string][]*GameLine{}
+
 	data, err := ioutil.ReadFile(*translatedCsv)
 	Fatal(err)
 	Fatal(gocsv.UnmarshalBytes(data, &gameLines))
@@ -44,8 +49,38 @@ func main() {
 			continue
 		}
 		if len(line.TranslatedText) > line.Length {
-			log.Errorf("line %v is too long", line)
+			log.Panic("line %v is too long", line)
 			continue
 		}
+		line.File = "DATA/" + line.File
+		gameLinesMap[line.File] = append(gameLinesMap[line.File], line)
+	}
+
+	for filename, lines := range gameLinesMap {
+		path := filepath.Join(*inputFolder, filename)
+		outPath := filepath.Join(*outputFolder, filename)
+		log.Printf("processing input %v to output %v", path, outPath)
+		fileData, err := ioutil.ReadFile(path)
+		Fatal(err)
+		for _, line := range lines {
+			log.Print("processing line: ", line)
+			for i := 0; i < line.Length+1; i++ {
+				if i < len(line.TranslatedText) {
+					// TODO: convert TranslatedText to shiftjis
+					// log.Printf("replacing offset %v, %v with %v", line.Offset+i, fileData[line.Offset+i], line.TranslatedText[i])
+					if line.TranslatedText[i] == '\n' {
+						fileData[line.Offset+i] = 0
+					} else {
+						fileData[line.Offset+i] = line.TranslatedText[i]
+					}
+				} else if i < line.Length {
+					// log.Printf("replacing offset %v, %v with 0", line.Offset+i, fileData[line.Offset+i])
+					fileData[line.Offset+i] = ' '
+				} else {
+					fileData[line.Offset+i] = 0
+				}
+			}
+		}
+		Fatal(ioutil.WriteFile(outPath, fileData, 0644))
 	}
 }

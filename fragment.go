@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,6 +13,10 @@ import (
 
 	"github.com/gocarina/gocsv"
 	"golang.org/x/text/encoding/japanese"
+)
+
+var (
+	outputFolder = flag.String("outputFolder", "", "output folder")
 )
 
 func Fatal(err error) {
@@ -39,7 +46,7 @@ var jisDecoder = japanese.ShiftJIS.NewDecoder()
 // \xFF01-\xFF5E is full width alphanumeric (e.g. ０ １ ２ ３)
 // \x3000-\x303F japanese punctionation
 const CHARS = "[\\p{Han}\\p{Hiragana}\\p{Katakana}" +
-	"\x20-\x7E・ー“ΔΘ…○×ΣΛΩ※―”↑★△㎏￥∑↓" +
+	"\n\x20-\x7E・ー“ΔΘ…○×ΣΛΩ※―”↑★△㎏￥∑↓" +
 	"\\x{2E80}-\\x{2FD5}\\x{FF5F}-\\x{FF9F}\\x{FF01}-\\x{FF5E}\\x{3000}-\\x{303F}\\x{31F0}-\\x{31FF}\\x{3220}-\\x{3243}\\x{3280}-\\x{337F}]"
 
 var re = regexp.MustCompile("^" + CHARS + "+$")
@@ -66,8 +73,8 @@ func parseJIS(data []byte) string {
 		return ""
 	}
 	if !re.Match(utf8Bytes) {
-		// invalid := reFilter.ReplaceAllString(string(utf8Bytes), "")
-		// log.Printf("filtered (regex): %s [%v]", utf8Bytes, invalid)
+		invalid := reFilter.ReplaceAllString(string(utf8Bytes), "")
+		log.Printf("filtered (regex): %s [%v]", utf8Bytes, invalid)
 		return ""
 	}
 	if !jpnChar.Match(utf8Bytes) {
@@ -88,6 +95,10 @@ type GameLine struct {
 	Length         int    `csv:"LENGTH"`
 	OriginalText   string `csv:"ORIGINAL_TEXT"`
 	TranslatedText string `csv:"TRANSLATED_TEXT"`
+	Status         string `csv:"STATUS"`
+	TlLength       int    `csv:"TL_LENGTH"`
+	Notes          string `csv:"NOTES"`
+	TextKey        string `csv:"TEXT_KEY"`
 }
 
 type ManualFilter struct {
@@ -97,11 +108,12 @@ type ManualFilter struct {
 }
 
 var manualFilters []*ManualFilter = []*ManualFilter{
-	{"DEMOT.PRG", 3799, 30634},
-	{"MATCHING.PRG", 1552, 1528523},
-	{"GCMNO.PRG", 257, 1062172},
-	{"DESKTOPF.PRG", 542, 175730},
-	{"GCMNF.PRG", 815, 1582676},
+	{"DEMOT.PRG", 3793, 30630},
+	{"MATCHING.PRG", 1548, 1528518},
+	{"GCMNO.PRG", 253, 1062160},
+	{"DESKTOPF.PRG", 537, 175726},
+	{"GCMNF.PRG", 810, 1582672},
+	{"TOPPAGEF.PRG", 22476, 161554},
 }
 
 func manuallyFiltered(gl *GameLine) bool {
@@ -114,11 +126,66 @@ func manuallyFiltered(gl *GameLine) bool {
 	return false
 }
 
+// func combine(orig []*GameLine) []*GameLine {
+// 	var combined []*GameLine
+
+// 	skip := 0
+// 	for i, gl := range orig {
+// 		for j := i + 1; j < len(orig); j++ {
+// 			if skip > 0 {
+// 				skip--
+// 				continue
+// 			}
+// 			cont := orig[j]
+// 			if gl.Offset+gl.Length+1 == cont.Offset {
+// 				log.Printf("%v seems to be continuation of %v", gl, cont)
+// 				gl.OriginalText += "\n" + cont.OriginalText
+// 				gl.Length += cont.Length + 1
+// 				skip++
+// 			}
+// 		}
+// 		combined = append(combined, gl)
+// 	}
+// 	return combined
+// }
+
+func textKey(text string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(text)))
+}
+
+type TLLine struct {
+	Length         int    `csv:"LENGTH"`
+	OriginalText   string `csv:"ORIGINAL_TEXT"`
+	TranslatedText string `csv:"TRANSLATED_TEXT"`
+	Status         string `csv:"STATUS"`
+	TlLength       int    `csv:"TL_LENGTH"`
+	Notes          string `csv:"NOTES"`
+	TextKey        string `csv:"TEXT_KEY"`
+}
+
+func uniqueTLLines(orig []*GameLine) []*TLLine {
+	tls := []*TLLine{}
+
+	lineMap := map[string]bool{}
+	for _, gl := range orig {
+		if !lineMap[gl.OriginalText] {
+			tls = append(tls, &TLLine{Length: gl.Length, OriginalText: gl.OriginalText, TextKey: gl.TextKey})
+			lineMap[gl.OriginalText] = true
+		}
+	}
+	return tls
+}
+
 func main() {
+	flag.Parse()
+	log.Print(os.Args)
 	var gameLines []*GameLine
 
-	for _, path := range os.Args[1:] {
+	for _, path := range os.Args[2:] {
 		data, err := ioutil.ReadFile(path)
+
+		data = bytes.Replace(data, []byte{0, '#'}, []byte{'\n', '#'}, -1)
+
 		basename := filepath.Base(path)
 		Fatal(err)
 		cur := 0
@@ -128,7 +195,7 @@ func main() {
 					shiftjis := data[cur:i]
 					line := parseJIS(shiftjis)
 					if line != "" {
-						gl := &GameLine{File: basename, Offset: i, Length: len(shiftjis), OriginalText: line}
+						gl := &GameLine{File: basename, Offset: cur, Length: len(shiftjis), OriginalText: line, TextKey: textKey(line)}
 						if !manuallyFiltered(gl) {
 							gameLines = append(gameLines, gl)
 						}
@@ -139,7 +206,18 @@ func main() {
 			}
 		}
 	}
-	csv, err := gocsv.MarshalString(&gameLines)
+	// combined := combine(gameLines)
+	// filter(gameLines)
+
+	gameLinesCsv, err := gocsv.MarshalBytes(gameLines)
 	Fatal(err)
-	fmt.Print(csv)
+	err = ioutil.WriteFile(filepath.Join(*outputFolder, "gamelines.csv"), gameLinesCsv, 0644)
+	Fatal(err)
+
+	tlLines := uniqueTLLines(gameLines)
+	tlLinesCsv, err := gocsv.MarshalBytes(tlLines)
+	Fatal(err)
+	err = ioutil.WriteFile(filepath.Join(*outputFolder, "tllines.csv"), tlLinesCsv, 0644)
+	Fatal(err)
+
 }
