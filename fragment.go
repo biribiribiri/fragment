@@ -24,12 +24,6 @@ func Fatal(err error) {
 	}
 }
 
-type FoundText struct {
-	address   int
-	shiftJis  []byte
-	utf8Bytes []byte
-}
-
 func isAscii(utf8Bytes []byte) bool {
 	for _, b := range utf8Bytes {
 		if b > 0x7f {
