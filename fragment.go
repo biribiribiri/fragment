@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"flag"
 	"fmt"
@@ -56,37 +55,32 @@ var jpnChar = regexp.MustCompile("[\\p{Han}\\p{Hiragana}\\p{Katakana}]")
 //
 func parseJIS(data []byte) string {
 	utf8Bytes, err := jisDecoder.Bytes(data)
-	if err != nil { // Didn't parse as shift-JIS.
+	if err != nil || len(utf8Bytes) < 2 { // Didn't parse as shift-JIS.
 		return ""
 	}
-	// if !utf8.Valid(utf8Bytes) {
-	// 	log.Printf("filtered: %s", utf8Bytes)
-	// 	return ""
-	// }
-
-	if len(data) < 4 {
-		// log.Printf("filtered (too short): %s", utf8Bytes)
-		return ""
-	}
-	if isAscii(utf8Bytes) {
-		// log.Printf("filtered (only ascii): %s", utf8Bytes)
-		return ""
-	}
-	if !re.Match(utf8Bytes) {
-		invalid := reFilter.ReplaceAllString(string(utf8Bytes), "")
-		log.Printf("filtered (regex): %s [%v]", utf8Bytes, invalid)
-		return ""
-	}
-	if !jpnChar.Match(utf8Bytes) {
-		// log.Printf("filtered (no japanese): %s", utf8Bytes)
-		return ""
-	}
-
-	// if len(re.FindAll(utf8Bytes, 4)) < 4 {
-	// 	return ""
-	// }
 
 	return string(utf8Bytes)
+}
+
+func lengthFilter(gl *GameLine) bool {
+	return gl.Length < 4
+}
+
+func asciiFilter(gl *GameLine) bool {
+	for _, b := range gl.OriginalText {
+		if b > 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func validCharFilter(gl *GameLine) bool {
+	return !re.MatchString(gl.OriginalText)
+}
+
+func jpnCharFilter(gl *GameLine) bool {
+	return !jpnChar.MatchString(gl.OriginalText)
 }
 
 type GameLine struct {
@@ -109,45 +103,55 @@ type ManualFilter struct {
 
 var manualFilters []*ManualFilter = []*ManualFilter{
 	{"DEMOT.PRG", 3793, 30630},
-	{"MATCHING.PRG", 1548, 1528518},
+	{"MATCHING.PRG", 1114, 1561520},
 	{"GCMNO.PRG", 253, 1062160},
 	{"DESKTOPF.PRG", 537, 175726},
 	{"GCMNF.PRG", 810, 1582672},
-	{"TOPPAGEF.PRG", 22476, 161554},
+	{"GCMNF.PRG", 1717132, 1722056},
+	{"GCMNF.PRG", 1593760, 1616784},
+	{"GCMNF.PRG", 1624192, 1624376},
+	{"GCMNO.PRG", 1109024, 1129996},
+	{"DEMOT.PRG", 1114, 3414},
+	{"GCMNF.PRG", 1821456, 1863840},
+	{"GCMNF.PRG", 1864432, 1865841},
+	{"DEMOT.PRG", 33520, 34136},
+	{"TOPPAGEF.PRG", 9, 204612},
+	{"TOPPAGEF.PRG", 240888, 242268},
+	{"MATCHING.PRG", 1633836, 1639760},
 }
 
 func manuallyFiltered(gl *GameLine) bool {
 	for _, f := range manualFilters {
 		if f.File == gl.File && gl.Offset >= f.StartOffset && gl.Offset <= f.EndOffset {
-			log.Printf("filtered (manual): %v", gl)
+			// log.Printf("filtered (manual): %v", gl)
 			return true
 		}
 	}
 	return false
 }
 
-// func combine(orig []*GameLine) []*GameLine {
-// 	var combined []*GameLine
+func combine(orig []*GameLine) []*GameLine {
+	var combined []*GameLine
 
-// 	skip := 0
-// 	for i, gl := range orig {
-// 		for j := i + 1; j < len(orig); j++ {
-// 			if skip > 0 {
-// 				skip--
-// 				continue
-// 			}
-// 			cont := orig[j]
-// 			if gl.Offset+gl.Length+1 == cont.Offset {
-// 				log.Printf("%v seems to be continuation of %v", gl, cont)
-// 				gl.OriginalText += "\n" + cont.OriginalText
-// 				gl.Length += cont.Length + 1
-// 				skip++
-// 			}
-// 		}
-// 		combined = append(combined, gl)
-// 	}
-// 	return combined
-// }
+	skip := 0
+	for i, gl := range orig {
+		if skip > 0 {
+			skip--
+			continue
+		}
+		for j := i + 1; j < len(orig); j++ {
+			cont := orig[j]
+			if gl.Offset+gl.Length+1 == cont.Offset {
+				// log.Printf("%v seems to be continuation of %v", gl, cont)
+				gl.OriginalText += "\n" + cont.OriginalText
+				gl.Length += cont.Length + 1
+				skip++
+			}
+		}
+		combined = append(combined, gl)
+	}
+	return combined
+}
 
 func textKey(text string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(text)))
@@ -184,7 +188,7 @@ func main() {
 	for _, path := range os.Args[2:] {
 		data, err := ioutil.ReadFile(path)
 
-		data = bytes.Replace(data, []byte{0, '#'}, []byte{'\n', '#'}, -1)
+		// data = bytes.Replace(data, []byte{0, '#'}, []byte{'\n', '#'}, -1)
 
 		basename := filepath.Base(path)
 		Fatal(err)
@@ -195,8 +199,8 @@ func main() {
 					shiftjis := data[cur:i]
 					line := parseJIS(shiftjis)
 					if line != "" {
-						gl := &GameLine{File: basename, Offset: cur, Length: len(shiftjis), OriginalText: line, TextKey: textKey(line)}
-						if !manuallyFiltered(gl) {
+						gl := &GameLine{File: basename, Offset: cur, Length: len(shiftjis), OriginalText: line}
+						if !validCharFilter(gl) && !manuallyFiltered(gl) {
 							gameLines = append(gameLines, gl)
 						}
 						// fmt.Printf("%s,%d,%d,%q\n", basename, i, len(shiftjis), line)
@@ -206,8 +210,26 @@ func main() {
 			}
 		}
 	}
-	// combined := combine(gameLines)
+	gameLines = combine(gameLines)
 	// filter(gameLines)
+
+	for _, gl := range gameLines {
+		gl.TextKey = textKey(gl.OriginalText)
+	}
+
+	var filteredGameLines []*GameLine
+
+	for _, gl := range gameLines {
+		if lengthFilter(gl) ||
+			asciiFilter(gl) ||
+			validCharFilter(gl) ||
+			manuallyFiltered(gl) ||
+			jpnCharFilter(gl) {
+			continue
+		}
+		filteredGameLines = append(filteredGameLines, gl)
+	}
+	gameLines = filteredGameLines
 
 	gameLinesCsv, err := gocsv.MarshalBytes(gameLines)
 	Fatal(err)
