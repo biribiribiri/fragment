@@ -34,8 +34,8 @@ var (
 )
 
 func main() {
-	fmt.Print("fragment patcher by plm")
 	flag.Parse()
+	fmt.Println("fragment patcher by plm")
 
 	var gameLines []*GameLine
 	gameLinesMap := map[string][]*GameLine{}
@@ -44,6 +44,7 @@ func main() {
 	Fatal(err)
 	Fatal(gocsv.UnmarshalBytes(data, &gameLines))
 
+	fmt.Printf("found %v game lines\n", len(gameLines))
 	for _, line := range gameLines {
 		if line.TranslatedText == "" {
 			continue
@@ -55,7 +56,7 @@ func main() {
 		line.File = "DATA/" + line.File
 		gameLinesMap[line.File] = append(gameLinesMap[line.File], line)
 	}
-
+	fmt.Print(gameLinesMap)
 	for filename, lines := range gameLinesMap {
 		path := filepath.Join(*inputFolder, filename)
 		outPath := filepath.Join(*outputFolder, filename)

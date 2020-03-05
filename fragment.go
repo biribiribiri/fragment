@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/gocarina/gocsv"
 	"golang.org/x/text/encoding/japanese"
@@ -179,7 +180,6 @@ func main() {
 
 		// data = bytes.Replace(data, []byte{0, '#'}, []byte{'\n', '#'}, -1)
 
-		basename := filepath.Base(path)
 		Fatal(err)
 		cur := 0
 		for i, v := range data {
@@ -188,7 +188,7 @@ func main() {
 					shiftjis := data[cur:i]
 					line := parseJIS(shiftjis)
 					if line != "" {
-						gl := &GameLine{File: basename, Offset: cur, Length: len(shiftjis), OriginalText: line}
+						gl := &GameLine{File: path, Offset: cur, Length: len(shiftjis), OriginalText: line}
 						if !validCharFilter(gl) && !manuallyFiltered(gl) {
 							gameLines = append(gameLines, gl)
 						}
@@ -231,4 +231,10 @@ func main() {
 	err = ioutil.WriteFile(filepath.Join(*outputFolder, "tllines.csv"), tlLinesCsv, 0644)
 	Fatal(err)
 
+	var uniqueLines string
+	for _, l := range tlLines {
+		uniqueLines += strings.Replace(l.OriginalText, "\n", "", -1) + "\n"
+	}
+	err = ioutil.WriteFile(filepath.Join(*outputFolder, "uniquelines.csv"), []byte(uniqueLines), 0644)
+	Fatal(err)
 }
