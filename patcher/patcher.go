@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/gocarina/gocsv"
+	"golang.org/x/text/encoding/japanese"
 )
 
 type GameLine struct {
@@ -31,6 +32,7 @@ var (
 	translatedCsv = flag.String("translatedCsv", "", "path to translated csv")
 	inputFolder   = flag.String("inputFolder", "", "original game folder")
 	outputFolder  = flag.String("outputFolder", "", "patched output")
+	jisEncoder    = japanese.ShiftJIS.NewEncoder()
 )
 
 func main() {
@@ -49,11 +51,14 @@ func main() {
 		if line.TranslatedText == "" {
 			continue
 		}
-		if len(line.TranslatedText) > line.Length {
+		jis, err := jisEncoder.String(line.TranslatedText)
+		Fatal(err)
+		if len(jis) > line.Length {
 			log.Panic("line %v is too long", line)
 			continue
 		}
 		line.File = "DATA/" + line.File
+		line.TranslatedText = jis
 		gameLinesMap[line.File] = append(gameLinesMap[line.File], line)
 	}
 	fmt.Print(gameLinesMap)
@@ -67,7 +72,6 @@ func main() {
 			log.Print("processing line: ", line)
 			for i := 0; i < line.Length+1; i++ {
 				if i < len(line.TranslatedText) {
-					// TODO: convert TranslatedText to shiftjis
 					// log.Printf("replacing offset %v, %v with %v", line.Offset+i, fileData[line.Offset+i], line.TranslatedText[i])
 					if line.TranslatedText[i] == '\n' {
 						fileData[line.Offset+i] = 0
