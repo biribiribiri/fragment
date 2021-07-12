@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/biribiribiri/iso9660"
 	"github.com/gocarina/gocsv"
@@ -44,11 +43,15 @@ func filesInIsoDirectory(isoFile *iso9660.File, base string, extentMap map[strin
 	if err != nil {
 		log.Fatalf("failed to get iso folder children: %s", err)
 	}
+	var sep string
+	if base != "" {
+		sep = "/"
+	}
 	for _, child := range children {
 		if child.IsDir() {
-			filesInIsoDirectory(child, filepath.Join(base, child.Name()), extentMap)
+			filesInIsoDirectory(child, base+sep+child.Name(), extentMap)
 		} else {
-			extentMap[filepath.Join(base, child.Name())] = child.Extent()
+			extentMap[base+sep+child.Name()] = child.Extent()
 		}
 	}
 }
@@ -138,7 +141,8 @@ func main() {
 					}
 				} else if i < line.Length {
 					// log.Printf("replacing offset %v, %v with 0", line.Offset+i, fileData[line.Offset+i])
-					fileData[line.Offset+i] = ' '
+					// fileData[line.Offset+i] = ' '
+					fileData[line.Offset+i] = 0
 				} else {
 					fileData[line.Offset+i] = 0
 				}
