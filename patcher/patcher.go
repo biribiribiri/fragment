@@ -35,6 +35,7 @@ var (
 	translatedCsv = flag.String("translatedCsv", "https://docs.google.com/spreadsheets/d/e/2PACX-1vTEeAsyZAWYOq3NouuFryyl-U7Tk0Xxe0rar1ZPrM_qUou170P8-BX5fS2w-9tPLnzq6VquXWj3qrpO/pub?gid=1884693932&single=true&output=csv", "path to translated csv")
 	isoPath       = flag.String("isoPath", "", "Path to original fragment ISO")
 	outputIsoPath = flag.String("outputIsoPath", "", "outputIsoPath")
+	earlyTerminateLines = flag.Bool("earlyTerminateLines", true, "Whether to terminate lines early (if false, use spaces to pad out lines)")
 	jisEncoder    = japanese.ShiftJIS.NewEncoder()
 )
 
@@ -141,8 +142,11 @@ func main() {
 					}
 				} else if i < line.Length {
 					// log.Printf("replacing offset %v, %v with 0", line.Offset+i, fileData[line.Offset+i])
-					// fileData[line.Offset+i] = ' '
-					fileData[line.Offset+i] = 0
+					if *earlyTerminateLines {
+						fileData[line.Offset+i] = 0
+					} else {
+						fileData[line.Offset+i] = ' '
+					}
 				} else {
 					fileData[line.Offset+i] = 0
 				}
